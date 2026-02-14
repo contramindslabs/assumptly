@@ -60,25 +60,62 @@ Return your response as a JSON array of objects with these exact fields:
   ]
 }`;
 
-    const response = await openai.chat.completions.create({
-      model: "gpt-5-mini",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: `Here is the pitch deck text to analyze:\n\n${pdfText}` },
-      ],
-      response_format: { type: "json_object" },
-      max_completion_tokens: 8192,
-    });
-
-    const content = response.choices[0]?.message?.content;
-    if (!content) {
-      throw new Error("No response from AI");
+    let response;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        response = await openai.chat.completions.create({
+          model: "gpt-5-mini",
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: `Here is the pitch deck text to analyze:\n\n${pdfText}` },
+          ],
+          response_format: { type: "json_object" },
+          max_completion_tokens: 8192,
+        });
+        break;
+      } catch (apiError: any) {
+        console.error(`OpenAI API attempt ${attempt}/3 failed for deck ${deckId}:`, apiError?.message || apiError);
+        if (attempt === 3) throw apiError;
+        await new Promise((r) => setTimeout(r, 2000 * attempt));
+      }
     }
 
-    const parsed = JSON.parse(content);
-    const extractedAssumptions: ExtractedAssumption[] = parsed.assumptions || [];
+    if (!response) {
+      throw new Error("Failed to get AI response after retries");
+    }
+
+    const choice = response.choices[0];
+    const content = choice?.message?.content;
+    if (!content) {
+      throw new Error(`No response from AI. Finish reason: ${choice?.finish_reason}`);
+    }
+
+    if (choice.finish_reason === "length") {
+      console.warn("AI response was truncated due to token limit for deck", deckId);
+    }
+
+    let parsed: any;
+    try {
+      parsed = JSON.parse(content);
+    } catch (parseErr) {
+      console.error("Failed to parse AI response as JSON for deck", deckId, "Content:", content.substring(0, 500));
+      throw new Error("AI returned invalid JSON response");
+    }
+
+    let extractedAssumptions: ExtractedAssumption[] = [];
+    if (Array.isArray(parsed.assumptions)) {
+      extractedAssumptions = parsed.assumptions;
+    } else if (Array.isArray(parsed)) {
+      extractedAssumptions = parsed;
+    } else {
+      const arrayKey = Object.keys(parsed).find((k) => Array.isArray(parsed[k]));
+      if (arrayKey) {
+        extractedAssumptions = parsed[arrayKey];
+      }
+    }
 
     if (extractedAssumptions.length === 0) {
+      console.error("No assumptions found in AI response for deck", deckId, "Keys:", Object.keys(parsed), "Content preview:", content.substring(0, 300));
       throw new Error("No assumptions could be extracted from this deck");
     }
 
