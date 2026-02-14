@@ -1,8 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import multer from "multer";
-import * as pdfParseModule from "pdf-parse";
-const pdfParse = (pdfParseModule as any).default || pdfParseModule;
+import { PDFParse } from "pdf-parse";
 import { storage } from "./storage";
 import { analyzeDeck } from "./analyze";
 
@@ -28,8 +27,9 @@ export async function registerRoutes(
         return res.status(400).json({ error: "No PDF file provided" });
       }
 
-      const pdfData = await pdfParse(req.file.buffer);
-      const pdfText = pdfData.text;
+      const parser = new PDFParse({ data: req.file.buffer });
+      const textResult = await parser.getText();
+      const pdfText = textResult.text;
 
       if (!pdfText || pdfText.trim().length < 50) {
         return res.status(400).json({ error: "Could not extract enough text from this PDF. Make sure it contains readable text, not just images." });
@@ -50,7 +50,10 @@ export async function registerRoutes(
       });
     } catch (error: any) {
       console.error("Upload error:", error);
-      res.status(500).json({ error: error.message || "Failed to process upload" });
+      const message = error?.name === "InvalidPDFException"
+        ? "This file doesn't appear to be a valid PDF. Please try a different file."
+        : error.message || "Failed to process upload";
+      res.status(500).json({ error: message });
     }
   });
 
