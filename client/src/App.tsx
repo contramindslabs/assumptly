@@ -6,7 +6,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/lib/theme";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
-import { Shield, LayoutDashboard } from "lucide-react";
+import { LayoutDashboard } from "lucide-react";
+import logoImg from "@assets/Assumptly-Logo-V1.0_1771111370050.png";
 import NotFound from "@/pages/not-found";
 import UploadPage from "@/pages/upload";
 import AnalysisPage from "@/pages/analysis";
@@ -20,7 +21,7 @@ function Header() {
       <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between gap-4">
         <Link href="/">
           <div className="flex items-center gap-2 cursor-pointer" data-testid="link-home">
-            <Shield className="w-5 h-5 text-primary" />
+            <img src={logoImg} alt="Assumptly" className="w-6 h-6 rounded" />
             <span className="font-bold text-foreground text-sm tracking-tight">Assumptly</span>
           </div>
         </Link>
