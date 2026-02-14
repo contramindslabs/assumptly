@@ -118,19 +118,25 @@ export default function AnalysisPage() {
 
   const { data: deck, isLoading: deckLoading } = useQuery<Deck>({
     queryKey: ["/api/decks", deckId],
+    refetchInterval: (query) => {
+      const d = query.state.data as Deck | undefined;
+      return d?.status === "analyzing" ? 2000 : false;
+    },
   });
 
   const { data: assumptions, isLoading: assumptionsLoading } = useQuery<Assumption[]>({
     queryKey: ["/api/decks", deckId, "assumptions"],
+    enabled: deck?.status === "complete",
+    staleTime: 0,
   });
 
-  const isLoading = deckLoading || assumptionsLoading;
+  const isLoading = deckLoading || (deck?.status === "complete" && assumptionsLoading);
 
   if (isLoading) {
     return <AnalysisSkeleton />;
   }
 
-  if (!deck || !assumptions) {
+  if (!deck) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <Card className="p-6 text-center max-w-sm mx-4">
@@ -148,8 +154,22 @@ export default function AnalysisPage() {
     );
   }
 
-  if (deck.status === "analyzing") {
-    return <AnalyzingState deck={deck} />;
+  if (deck.status === "analyzing" || deck.status === "pending") {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Card className="p-6 sm:p-8 text-center max-w-md mx-4">
+          <div className="w-14 h-14 rounded-md bg-primary/10 flex items-center justify-center mx-auto mb-4">
+            <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+          </div>
+          <h2 className="font-semibold text-foreground text-lg mb-2">Analyzing your pitch deck</h2>
+          <p className="text-sm text-muted-foreground mb-4 leading-relaxed">
+            Our AI is reading through your deck, extracting assumptions, and assessing risk levels.
+            This usually takes 15-30 seconds.
+          </p>
+          <p className="text-xs text-muted-foreground" data-testid="text-analyzing-name">{deck.fileName}</p>
+        </Card>
+      </div>
+    );
   }
 
   if (deck.status === "failed") {
@@ -170,12 +190,13 @@ export default function AnalysisPage() {
     );
   }
 
-  const categories = ["all", ...new Set(assumptions.map((a) => a.category))];
-  const filtered = activeTab === "all" ? assumptions : assumptions.filter((a) => a.category === activeTab);
+  const allAssumptions = assumptions || [];
+  const categories = ["all", ...new Set(allAssumptions.map((a) => a.category))];
+  const filtered = activeTab === "all" ? allAssumptions : allAssumptions.filter((a) => a.category === activeTab);
 
-  const highCount = assumptions.filter((a) => a.riskLevel === "High").length;
-  const medCount = assumptions.filter((a) => a.riskLevel === "Medium").length;
-  const lowCount = assumptions.filter((a) => a.riskLevel === "Low").length;
+  const highCount = allAssumptions.filter((a) => a.riskLevel === "High").length;
+  const medCount = allAssumptions.filter((a) => a.riskLevel === "Medium").length;
+  const lowCount = allAssumptions.filter((a) => a.riskLevel === "Low").length;
 
   return (
     <div className="min-h-screen bg-background">
@@ -206,7 +227,7 @@ export default function AnalysisPage() {
 
         <Card className="p-4 sm:p-5 mb-6">
           <div className="flex items-center justify-around gap-4">
-            <SummaryStat label="Total" value={assumptions.length} color="text-foreground" />
+            <SummaryStat label="Total" value={allAssumptions.length} color="text-foreground" />
             <div className="w-px h-8 bg-border" />
             <SummaryStat label="High Risk" value={highCount} color="text-destructive" />
             <div className="w-px h-8 bg-border" />
@@ -220,7 +241,7 @@ export default function AnalysisPage() {
           <TabsList className="mb-4 flex-wrap h-auto gap-1">
             {categories.map((cat) => (
               <TabsTrigger key={cat} value={cat} className="text-xs capitalize" data-testid={`tab-${cat}`}>
-                {cat === "all" ? `All (${assumptions.length})` : `${cat} (${assumptions.filter((a) => a.category === cat).length})`}
+                {cat === "all" ? `All (${allAssumptions.length})` : `${cat} (${allAssumptions.filter((a) => a.category === cat).length})`}
               </TabsTrigger>
             ))}
           </TabsList>
@@ -252,36 +273,6 @@ export default function AnalysisPage() {
           </Link>
         </div>
       </div>
-    </div>
-  );
-}
-
-function AnalyzingState({ deck }: { deck: Deck }) {
-  const { data } = useQuery<Deck>({
-    queryKey: ["/api/decks", String(deck.id)],
-    refetchInterval: 2000,
-  });
-
-  const currentDeck = data || deck;
-
-  if (currentDeck.status === "complete") {
-    window.location.reload();
-    return null;
-  }
-
-  return (
-    <div className="min-h-screen bg-background flex items-center justify-center">
-      <Card className="p-6 sm:p-8 text-center max-w-md mx-4">
-        <div className="w-14 h-14 rounded-md bg-primary/10 flex items-center justify-center mx-auto mb-4">
-          <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-        </div>
-        <h2 className="font-semibold text-foreground text-lg mb-2">Analyzing your pitch deck</h2>
-        <p className="text-sm text-muted-foreground mb-4 leading-relaxed">
-          Our AI is reading through your deck, extracting assumptions, and assessing risk levels.
-          This usually takes 15-30 seconds.
-        </p>
-        <p className="text-xs text-muted-foreground" data-testid="text-analyzing-name">{currentDeck.fileName}</p>
-      </Card>
     </div>
   );
 }
