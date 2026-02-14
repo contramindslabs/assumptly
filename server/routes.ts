@@ -29,9 +29,13 @@ export async function registerRoutes(
 
       const parser = new PDFParse({ data: req.file.buffer });
       const textResult = await parser.getText();
-      const pdfText = textResult.text;
+      let pdfText = textResult.text;
 
-      if (!pdfText || pdfText.trim().length < 50) {
+      pdfText = pdfText.replace(/--\s*\d+\s*of\s*\d+\s*--/g, "").replace(/\n{3,}/g, "\n\n").trim();
+
+      console.log(`PDF text extracted: ${pdfText.length} chars, ${textResult.pages?.length || 0} pages, file: ${req.file.originalname}`);
+
+      if (!pdfText || pdfText.length < 50) {
         return res.status(400).json({ error: "Could not extract enough text from this PDF. Make sure it contains readable text, not just images." });
       }
 
