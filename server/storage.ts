@@ -1,38 +1,54 @@
-import { type User, type InsertUser } from "@shared/schema";
-import { randomUUID } from "crypto";
-
-// modify the interface with any CRUD methods
-// you might need
+import { db } from "./db";
+import { decks, assumptions, type Deck, type InsertDeck, type Assumption, type InsertAssumption } from "@shared/schema";
+import { eq, desc } from "drizzle-orm";
 
 export interface IStorage {
-  getUser(id: string): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
+  createDeck(deck: InsertDeck): Promise<Deck>;
+  getDeck(id: number): Promise<Deck | undefined>;
+  getAllDecks(): Promise<Deck[]>;
+  updateDeckStatus(id: number, status: string, slideCount?: number): Promise<Deck | undefined>;
+  deleteDeck(id: number): Promise<void>;
+  createAssumptions(items: InsertAssumption[]): Promise<Assumption[]>;
+  getAssumptionsByDeck(deckId: number): Promise<Assumption[]>;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<string, User>;
-
-  constructor() {
-    this.users = new Map();
+export class DatabaseStorage implements IStorage {
+  async createDeck(deck: InsertDeck): Promise<Deck> {
+    const [result] = await db.insert(decks).values(deck).returning();
+    return result;
   }
 
-  async getUser(id: string): Promise<User | undefined> {
-    return this.users.get(id);
+  async getDeck(id: number): Promise<Deck | undefined> {
+    const [result] = await db.select().from(decks).where(eq(decks.id, id));
+    return result;
   }
 
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username,
-    );
+  async getAllDecks(): Promise<Deck[]> {
+    return db.select().from(decks).orderBy(desc(decks.createdAt));
   }
 
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const id = randomUUID();
-    const user: User = { ...insertUser, id };
-    this.users.set(id, user);
-    return user;
+  async updateDeckStatus(id: number, status: string, slideCount?: number): Promise<Deck | undefined> {
+    const values: Partial<Deck> = { status };
+    if (slideCount !== undefined) {
+      values.slideCount = slideCount;
+    }
+    const [result] = await db.update(decks).set(values).where(eq(decks.id, id)).returning();
+    return result;
+  }
+
+  async deleteDeck(id: number): Promise<void> {
+    await db.delete(assumptions).where(eq(assumptions.deckId, id));
+    await db.delete(decks).where(eq(decks.id, id));
+  }
+
+  async createAssumptions(items: InsertAssumption[]): Promise<Assumption[]> {
+    if (items.length === 0) return [];
+    return db.insert(assumptions).values(items).returning();
+  }
+
+  async getAssumptionsByDeck(deckId: number): Promise<Assumption[]> {
+    return db.select().from(assumptions).where(eq(assumptions.deckId, deckId));
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DatabaseStorage();
